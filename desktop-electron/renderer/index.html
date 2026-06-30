@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' https: data:;" />
+  <title>dou+</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="titlebar">
+  <div id="titlebar-drag"><span id="titlebar-title">dou+</span></div>
+  <div id="titlebar-actions">
+    <button class="tb-btn" id="tb-min">&mdash;</button>
+    <button class="tb-btn" id="tb-max">&#9744;</button>
+    <button class="tb-btn tb-close" id="tb-close">&#10005;</button>
+  </div>
+</div>
+
+<div id="app">
+  <!-- ====== SIDEBAR ====== -->
+  <aside id="sidebar">
+    <div id="user-card">
+      <div id="user-avatar-wrap">
+        <img id="user-avatar" src="" />
+        <div id="user-avatar-placeholder">
+          <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="16" r="8" fill="#555"/><ellipse cx="24" cy="44" rx="18" ry="12" fill="#555"/></svg>
+        </div>
+      </div>
+      <div id="user-nickname">未登录</div>
+      <div id="user-stats">
+        <div class="stat"><span class="stat-num" id="stat-following">-</span><span class="stat-label">关注</span></div>
+        <div class="stat"><span class="stat-num" id="stat-follower">-</span><span class="stat-label">粉丝</span></div>
+        <div class="stat"><span class="stat-num" id="stat-aweme">-</span><span class="stat-label">作品</span></div>
+      </div>
+      <button id="btn-login" class="btn-primary">浏览器登录</button>
+      <button id="btn-refresh-user" class="btn-text-only" style="display:none">刷新信息</button>
+    </div>
+    <nav id="sidebar-nav">
+      <button class="nav-btn active" data-page="home">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>首页</button>
+      <button class="nav-btn" data-page="following">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>关注列表</button>
+      <button class="nav-btn" data-page="collections">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>收藏夹</button>
+      <button class="nav-btn" data-page="tasks">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>下载任务
+      </button>
+      <button class="nav-btn" data-page="settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>设置</button>
+    </nav>
+  </aside>
+
+  <!-- ====== MAIN ====== -->
+  <main id="main">
+
+    <!-- === HOME PAGE === -->
+    <div id="page-home" class="page active">
+      <div class="home-layout">
+        <!-- Center -->
+        <div id="home-center">
+          <div id="hero-area">
+            <div id="hero-logo">dou<span>+</span></div>
+            <div id="hero-sub">抖音批量下载工具</div>
+            <div id="hero-input-wrap">
+              <input type="text" id="input-url" placeholder="粘贴链接 — v.douyin.com 短链 / 用户主页 / 视频..." autofocus />
+              <button id="btn-paste" title="粘贴">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button id="btn-resolve">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                解析
+              </button>
+            </div>
+          </div>
+
+          <!-- Hot trends -->
+          <div id="hot-trends">
+            <div id="hot-trends-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="#fe2c55"><path d="M12 23c-1.66 0-3-1.34-3-3h6c0 1.66-1.34 3-3 3zm7-8.74c0-2.74-1.86-5.02-4.4-5.62.42.7.9 1.71.9 2.86 0 2.48-1.46 4.5-3.5 4.5s-3.5-2.02-3.5-4.5c0-1.15.48-2.16.9-2.86C6.86 9.24 5 11.52 5 14.26 5 18.14 8.13 21 12 21s7-2.86 7-6.74z"/></svg>
+              <span>抖音热点</span>
+            </div>
+            <div id="hot-trends-list"></div>
+          </div>
+
+          <div id="progress-bar-wrap" style="display:none"><div id="progress-bar-inner"></div></div>
+          <div id="progress-text" style="display:none"></div>
+          <button id="btn-stop" class="btn-stop" style="display:none">停止</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- === FOLLOWING PAGE === -->
+    <div id="page-following" class="page">
+      <div class="page-header">
+        <h2>关注列表</h2>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="following-search" placeholder="搜索关注..." style="padding:7px 14px;border:1px solid #222;border-radius:20px;background:#161616;color:#fff;font-size:12px;outline:none;width:160px" />
+          <button id="btn-load-following" class="btn-primary-sm">加载关注</button>
+        </div>
+      </div>
+      <div id="following-grid" class="user-grid"></div>
+      <div id="following-loading" style="display:none;text-align:center;padding:40px;color:#666">加载中...</div>
+      <div id="user-detail" style="display:none;flex-direction:column;gap:16px">
+        <button id="btn-back-following" class="btn-text-only" style="align-self:flex-start;font-size:13px">&larr; 返回关注列表</button>
+        <div style="display:flex;align-items:center;gap:14px">
+          <img id="detail-avatar" style="width:56px;height:56px;border-radius:50%;object-fit:cover;background:#1a1a1a" />
+          <div><div id="detail-name" style="font-size:18px;font-weight:700"></div><div id="detail-id" style="font-size:12px;color:#666"></div></div>
+          <button id="btn-detail-dl-all" class="btn-primary-sm" style="margin-left:auto">下载全部</button>
+        </div>
+        <div id="posts-grid"></div>
+        <div id="posts-loading" style="display:none;text-align:center;padding:20px;color:#666">加载中...</div>
+        <button id="btn-posts-more" class="btn-primary-sm" style="display:none;align-self:center;margin-top:8px">加载更多</button>
+        <div id="posts-batch-bar" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#111;border:1px solid #333;border-radius:24px;padding:12px 24px;display:none;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(0,0,0,0.6);z-index:100">
+          <span id="posts-batch-count">已选 0 个</span>
+          <button id="btn-posts-batch-dl" class="btn-primary-sm">下载选中</button>
+          <button id="btn-posts-batch-clear" style="padding:6px 14px;border:1px solid #333;border-radius:20px;background:none;color:#999;font-size:12px;cursor:pointer">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- === TASKS PAGE === -->
+    <div id="page-tasks" class="page">
+      <div class="page-header"><h2>下载任务</h2></div>
+      <div id="task-page-list" style="display:flex;flex-direction:column;gap:8px;padding:0 32px 20px"></div>
+      <div id="task-page-empty" style="text-align:center;padding:40px;color:#666">暂无下载任务</div>
+    </div>
+
+    <!-- === COLLECTIONS PAGE === -->
+    <div id="page-collections" class="page">
+      <div class="page-header"><h2>收藏夹</h2></div>
+      <div style="text-align:center;padding:40px;color:#666">首页选择「收藏」模式，粘贴收藏链接下载<br/><span style="font-size:12px">例如: https://www.douyin.com/user/self?showTab=favorite_collection</span></div>
+    </div>
+
+    <!-- === SETTINGS PAGE === -->
+    <div id="page-settings" class="page">
+      <div class="page-header"><h2>设置</h2></div>
+      <div style="max-width:500px;display:flex;flex-direction:column;gap:20px">
+        <div class="settings-group">
+          <label class="settings-group-title">下载路径</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="setting-path" style="flex:1;padding:10px 14px;border:1px solid #222;border-radius:12px;background:#161616;color:#fff;font-size:13px;outline:none" />
+            <button id="btn-browse-path" class="btn-primary-sm" style="padding:8px 16px">浏览</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-group-title">并发线程</label>
+          <div class="stepper" style="width:fit-content">
+            <button class="stepper-btn" data-action="down">-</button>
+            <span id="setting-threads" style="width:40px;text-align:center;font-size:14px;font-weight:600;line-height:30px">5</span>
+            <button class="stepper-btn" data-action="up">+</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <label class="settings-group-title">数据库</label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#999">
+            <input type="checkbox" id="setting-db" checked style="accent-color:var(--pink)" />
+            启用去重数据库
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast"></div>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

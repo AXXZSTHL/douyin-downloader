@@ -27,9 +27,14 @@ class JobStatus:
 
 
 class DownloadJob:
-    def __init__(self, job_id: str, url: str):
+    def __init__(self, job_id: str, url: str, mode: str = "post",
+                 number: int = 0, path: str = "./Downloaded/", thread: int = 5):
         self.job_id = job_id
         self.url = url
+        self.mode = mode
+        self.number = number
+        self.path = path
+        self.thread = thread
         self.status = JobStatus.PENDING
         self.created_at = _now_iso()
         self.started_at: Optional[str] = None
@@ -41,6 +46,9 @@ class DownloadJob:
         self.failed = 0
         self.skipped = 0
         self.error: Optional[str] = None
+        self.author_name: str = ""
+        self.save_path: str = ""
+        self.items: List[Dict[str, Any]] = []
         self._task: Optional[asyncio.Task] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -56,24 +64,18 @@ class DownloadJob:
             "failed": self.failed,
             "skipped": self.skipped,
             "error": self.error,
+            "author_name": self.author_name,
+            "save_path": self.save_path,
+            "items": self.items[-20:],  # last 20 items
         }
 
 
 class JobManager:
-    """内存 job 存储 + 并发执行器，带 TTL + 容量上限。
-
-    不做持久化——进程重启就丢失——因为当前目标只是暴露 HTTP 接口。
-    如需持久化可以后续在此加一层 SQLite。
-
-    剪裁策略：
-    - 每次 submit 前先剪裁一次：
-        a. 丢弃 finished_monotonic 超过 job_ttl_seconds 的终态 job；
-        b. 若剩余总数仍超过 max_jobs，按 finished_monotonic 升序淘汰最老的终态 job；
-        c. in-flight（pending/running）job 永不淘汰。
-    """
+    """内存 job 存储 + 并发执行器，带 TTL + 容量上限 + JSON 持久化。"""
 
     DEFAULT_MAX_JOBS = 500
     DEFAULT_JOB_TTL_SECONDS = 24 * 3600  # 24 小时
+    STORE_FILE = "config/jobs.json"
 
     def __init__(
         self,
@@ -89,10 +91,43 @@ class JobManager:
         self._lock = asyncio.Lock()
         self.max_jobs = max(1, int(max_jobs))
         self.job_ttl_seconds = max(0.0, float(job_ttl_seconds))
+        self._loaded = False
 
-    async def submit(self, url: str) -> DownloadJob:
+    async def _load(self):
+        if self._loaded: return
+        self._loaded = True
+        import json
+        from pathlib import Path
+        p = Path(self.STORE_FILE)
+        if not p.exists(): return
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            for d in (data or []):
+                j = DownloadJob(d["job_id"], d.get("url", ""))
+                j.status = d.get("status", "done")
+                j.total = d.get("total", 0)
+                j.success = d.get("success", 0)
+                j.failed = d.get("failed", 0)
+                j.skipped = d.get("skipped", 0)
+                j.author_name = d.get("author_name", "")
+                j.save_path = d.get("save_path", "")
+                j.items = d.get("items", [])
+                j.finished_monotonic = 0  # already done, don't TTL immediately
+                self._jobs[j.job_id] = j
+        except Exception: pass
+
+    async def _save(self):
+        import json
+        from pathlib import Path
+        p = Path(self.STORE_FILE)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = [j.to_dict() for j in self._jobs.values() if j.status in JobStatus.TERMINAL]
+        p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    async def submit(self, url: str, **kwargs) -> DownloadJob:
+        await self._load()
         job_id = uuid.uuid4().hex[:12]
-        job = DownloadJob(job_id=job_id, url=url)
+        job = DownloadJob(job_id=job_id, url=url, **kwargs)
         async with self._lock:
             self._prune_locked()
             self._jobs[job_id] = job
@@ -134,12 +169,20 @@ class JobManager:
             job.status = JobStatus.RUNNING
             job.started_at = _now_iso()
             try:
-                counts = await self.executor(job.url)
+                counts = await self.executor({
+                    "url": job.url,
+                    "mode": job.mode,
+                    "number": job.number,
+                    "path": job.path,
+                    "thread": job.thread,
+                }, job)
                 job.total = int(counts.get("total", 0))
                 job.success = int(counts.get("success", 0))
                 job.failed = int(counts.get("failed", 0))
                 job.skipped = int(counts.get("skipped", 0))
-                # 只要跑完就是 success；具体成功/失败个数通过字段区分
+                job.author_name = str(counts.get("author_name") or "")
+                job.save_path = str(counts.get("save_path") or "")
+                job.items = counts.get("items") or []
                 job.status = JobStatus.SUCCESS if job.failed == 0 else JobStatus.FAILED
             except Exception as exc:
                 job.status = JobStatus.FAILED
@@ -147,12 +190,15 @@ class JobManager:
             finally:
                 job.finished_at = _now_iso()
                 job.finished_monotonic = time.monotonic()
+                await self._save()
 
     async def get(self, job_id: str) -> Optional[DownloadJob]:
+        await self._load()
         async with self._lock:
             return self._jobs.get(job_id)
 
     async def list_jobs(self) -> List[DownloadJob]:
+        await self._load()
         async with self._lock:
             return list(self._jobs.values())
 

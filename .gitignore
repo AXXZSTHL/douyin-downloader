@@ -17,6 +17,7 @@ dist/
 .eggs/
 *.egg-info/
 pip-wheel-metadata/
+node_modules/
 
 # Virtual environments
 .venv/
@@ -34,9 +35,14 @@ logs/
 Downloaded/
 Transcripts/
 dy_downloader.db
+dy_downloader.db-shm
+dy_downloader.db-wal
 *.db
 *.sqlite
 *.sqlite3
+
+# Runtime job persistence (not source)
+config/jobs.json
 
 # Local config/secrets
 config*.yml

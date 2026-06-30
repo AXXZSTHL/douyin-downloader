@@ -1,0 +1,98 @@
+{
+  "name": "dou-plus",
+  "version": "3.0.0",
+  "description": "dou+ — 抖音批量下载工具",
+  "main": "main.js",
+  "author": "AXXZSTHL",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.douplus.desktop",
+    "productName": "dou+",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "desktop_server.py",
+      "server_launcher.py",
+      "desktop_app.py",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../server",
+        "to": "server"
+      },
+      {
+        "from": "../core",
+        "to": "core"
+      },
+      {
+        "from": "../auth",
+        "to": "auth"
+      },
+      {
+        "from": "../config",
+        "to": "config"
+      },
+      {
+        "from": "../control",
+        "to": "control"
+      },
+      {
+        "from": "../storage",
+        "to": "storage"
+      },
+      {
+        "from": "../tools",
+        "to": "tools"
+      },
+      {
+        "from": "../utils",
+        "to": "utils"
+      },
+      {
+        "from": "../cli",
+        "to": "cli"
+      },
+      {
+        "from": "../config.yml",
+        "to": "config.yml"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "icon.png",
+      "uninstallerIcon": "icon.png",
+      "installerHeaderIcon": "icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

@@ -27,8 +27,32 @@ from utils.validators import is_short_url, normalize_short_url
 logger = setup_logger("REST")
 
 
+def _extract_posts(items: list) -> list:
+    """Extract post previews from raw aweme items."""
+    posts = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        video = item.get("video") or {}
+        cover = (video.get("cover") or {}).get("url_list") or item.get("cover") or []
+        if isinstance(cover, list):
+            cover = cover[0] if cover else ""
+        posts.append({
+            "aweme_id": str(item.get("aweme_id") or ""),
+            "desc": str(item.get("desc") or "")[:80],
+            "cover": str(cover or ""),
+            "duration": int(video.get("duration") or 0) if isinstance(video, dict) else 0,
+            "is_video": not bool(item.get("images")),
+        })
+    return posts
+
+
 class DownloadRequest(BaseModel):
     url: str
+    mode: str = "post"
+    number: int = 0
+    path: str = "./Downloaded/"
+    thread: int = 5
 
 
 class JobResponse(BaseModel):
@@ -75,13 +99,37 @@ class _ServerDeps:
         self.queue_manager = QueueManager(max_workers=int(config.get("thread", 5) or 5))
 
 
-async def _execute_download(url: str, deps: "_ServerDeps") -> Dict[str, int]:
-    """简化版 download_url：只负责执行并返回成功/失败计数。
+async def _execute_download(params: dict, deps: "_ServerDeps", job=None) -> Dict[str, int]:
+    """简化版 download_url：只负责执行并返回成功/失败计数。"""
+    url = params["url"]
+    mode = params.get("mode", "post")
+    number = params.get("number", 0)
+    download_path = params.get("path", "./Downloaded/")
+    thread = params.get("thread", 5)
 
-    有意不复用 cli.main.download_url —— 后者绑定了 progress_display 的 rich 状态。
-    API client 仍按请求创建（aiohttp session 不跨请求复用）；其余重量级依赖从
-    _ServerDeps 共享。
-    """
+    from config import ConfigLoader
+
+    captured_items = []
+    author_name = ""
+
+    class _JobReporter:
+        def update_step(self, step, detail=""): pass
+        def set_item_total(self, total, detail=""): pass
+        def advance_item(self, status, detail=""):
+            import re
+            title = ""
+            aweme_id = ""
+            m = re.search(r'aweme[=_](\d+)', detail)
+            if m: aweme_id = m.group(1)
+            cover = ""
+            duplicated = status == "skipped"
+            captured_items.append({
+                "title": detail[:60], "aweme_id": aweme_id, "cover": cover,
+                "status": status, "duplicated": duplicated,
+            })
+
+    reporter = _JobReporter()
+
     async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api_client:
         if is_short_url(url):
             resolved = await api_client.resolve_short_url(normalize_short_url(url))
@@ -93,35 +141,57 @@ async def _execute_download(url: str, deps: "_ServerDeps") -> Dict[str, int]:
         if not parsed:
             raise RuntimeError(f"Unsupported URL: {url}")
 
+        runtime_cfg = ConfigLoader(None)
+        cfg = deps.config.config.copy()
+        cfg["path"] = download_path
+        cfg["thread"] = thread
+        cfg["mode"] = [mode]
+        cfg["number"] = {mode: number}
+        runtime_cfg.config = cfg
+
+        fm = deps.file_manager if download_path == deps.config.get("path") \
+            else FileManager(download_path)
+
         downloader = DownloaderFactory.create(
             parsed["type"],
-            deps.config,
+            runtime_cfg,
             api_client,
-            deps.file_manager,
+            fm,
             deps.cookie_manager,
-            None,  # database 不在 server 场景里启用，避免单例冲突
+            None,
             deps.rate_limiter,
             deps.retry_handler,
             deps.queue_manager,
-            progress_reporter=None,
+            progress_reporter=reporter,
         )
         if downloader is None:
             raise RuntimeError(f"No downloader for url_type={parsed['type']}")
 
         result = await downloader.download(parsed)
+
+        # Try to get author name from user info
+        if parsed.get("sec_uid"):
+            try:
+                info = await api_client.get_user_info(parsed["sec_uid"])
+                if info: author_name = info.get("nickname", "")
+            except Exception: pass
+
         return {
             "total": result.total,
             "success": result.success,
             "failed": result.failed,
             "skipped": result.skipped,
+            "author_name": author_name,
+            "save_path": str(download_path),
+            "items": captured_items,
         }
 
 
 def build_app(config: ConfigLoader) -> FastAPI:
     deps = _ServerDeps(config)
 
-    async def executor(url: str) -> Dict[str, int]:
-        return await _execute_download(url, deps)
+    async def executor(params: dict, job=None) -> Dict[str, int]:
+        return await _execute_download(params, deps, job)
 
     server_cfg = config.get("server") or {}
     if not isinstance(server_cfg, dict):
@@ -153,11 +223,186 @@ def build_app(config: ConfigLoader) -> FastAPI:
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/api/v1/user")
+    async def get_current_user() -> Dict[str, Any]:
+        """Return logged-in user info from Douyin."""
+        from core import DouyinAPIClient
+
+        try:
+            async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api:
+                user = await api.get_self_info()
+                if user:
+                    # Extract avatar URL from various formats
+                    avatar = user.get("avatar_larger") or user.get("avatar_medium") or user.get("avatar_thumb") or {}
+                    if isinstance(avatar, dict):
+                        urls = avatar.get("url_list") or []
+                        avatar = urls[0] if urls else ""
+                    return {
+                        "ok": True,
+                        "nickname": user.get("nickname", ""),
+                        "sec_uid": user.get("sec_uid", ""),
+                        "avatar": avatar,
+                        "follower_count": user.get("follower_count", 0),
+                        "following_count": user.get("following_count", 0),
+                        "aweme_count": user.get("aweme_count", 0),
+                    }
+                return {"ok": False, "error": "无法获取用户信息，请检查登录状态"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.get("/api/v1/following")
+    async def get_following(sec_uid: str = "", max_time: int = 0, count: int = 20) -> Dict[str, Any]:
+        """Return the logged-in user's following list."""
+        from core import DouyinAPIClient
+
+        try:
+            async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api:
+                if not sec_uid:
+                    user = await api.get_self_info()
+                    if not user:
+                        return {"ok": False, "error": "无法获取当前用户信息"}
+                    sec_uid = user.get("sec_uid", "")
+
+                page = await api.get_following_page(sec_uid, max_time=max_time, count=count)
+                items = page.get("items") or page.get("followings") or []
+                users = []
+                for item in items:
+                    # The following list embeds user info in different shapes
+                    u = item.get("user") or item.get("following") or item
+                    avatar = u.get("avatar_medium") or u.get("avatar_thumb") or {}
+                    if isinstance(avatar, dict):
+                        urls = avatar.get("url_list") or []
+                        avatar = urls[0] if urls else ""
+                    users.append({
+                        "nickname": u.get("nickname", ""),
+                        "sec_uid": u.get("sec_uid", ""),
+                        "unique_id": u.get("unique_id") or u.get("short_id", ""),
+                        "signature": str(u.get("signature") or "")[:60],
+                        "avatar": avatar,
+                        "follower_count": u.get("follower_count", 0),
+                    })
+                return {
+                    "ok": True,
+                    "users": users,
+                    "has_more": bool(page.get("has_more")),
+                    "min_time": int(page.get("min_time") or 0),
+                }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.get("/api/v1/user/posts")
+    async def get_user_posts(sec_uid: str = "", max_cursor: int = 0, count: int = 18) -> Dict[str, Any]:
+        """Return a user's post list (aweme items) for preview/selection."""
+        from core import DouyinAPIClient
+
+        if not sec_uid:
+            return {"ok": False, "error": "sec_uid is required"}
+        try:
+            async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api:
+                data = await api.get_user_post(sec_uid, max_cursor=max_cursor, count=count)
+                items = data.get("items") or data.get("aweme_list") or []
+                return {
+                    "ok": True,
+                    "posts": _extract_posts(items),
+                    "has_more": bool(data.get("has_more")),
+                    "max_cursor": int(data.get("max_cursor") or 0),
+                }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.get("/api/v1/resolve")
+    async def resolve_link(url: str = "") -> Dict[str, Any]:
+        """Resolve a Douyin short link and return the target info + video list."""
+        from core import DouyinAPIClient, URLParser
+        from utils.validators import is_short_url, normalize_short_url
+
+        if not url:
+            return {"ok": False, "error": "url is required"}
+        try:
+            async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api:
+                # Resolve short link first
+                resolved = url
+                if is_short_url(url):
+                    resolved = await api.resolve_short_url(normalize_short_url(url)) or url
+
+                parsed = URLParser.parse(resolved)
+                if not parsed:
+                    return {"ok": False, "error": "无法解析链接: " + resolved}
+
+                result = {"ok": True, "type": parsed["type"], "resolved": resolved}
+
+                if parsed["type"] == "user" and parsed.get("sec_uid"):
+                    user = await api.get_user_info(parsed["sec_uid"])
+                    if user:
+                        av = user.get("avatar_medium") or {}
+                        if isinstance(av, dict):
+                            av = (av.get("url_list") or [None])[0] or ""
+                        result["user"] = {
+                            "nickname": user.get("nickname", ""),
+                            "sec_uid": user.get("sec_uid", ""),
+                            "avatar": av,
+                            "follower_count": user.get("follower_count", 0),
+                            "aweme_count": user.get("aweme_count", 0),
+                        }
+                        # Also fetch first page of posts
+                        posts_data = await api.get_user_post(parsed["sec_uid"], max_cursor=0, count=18)
+                        items = posts_data.get("items") or posts_data.get("aweme_list") or []
+                        posts = _extract_posts(items)
+                        result["posts"] = posts
+                        result["has_more"] = bool(posts_data.get("has_more"))
+                        result["max_cursor"] = int(posts_data.get("max_cursor") or 0)
+                elif parsed["type"] in ("video", "note"):
+                    result["aweme_id"] = parsed.get("aweme_id", "")
+                    result["note_id"] = parsed.get("note_id", "")
+
+                return result
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.get("/api/v1/hot-board")
+    async def get_hot_board(limit: int = 15) -> Dict[str, Any]:
+        """Fetch Douyin hot search board."""
+        from core.discovery import dump_hot_board
+
+        try:
+            import tempfile
+            from pathlib import Path
+
+            async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api:
+                tmp = Path(tempfile.gettempdir()) / "douyin_hot.jsonl"
+                result = await dump_hot_board(api, tmp.parent, limit=max(1, min(50, limit)))
+                return {"ok": True, "items": result.get("items", [])}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @app.post("/api/v1/login")
+    async def trigger_login() -> Dict[str, Any]:
+        """Trigger browser login and return captured cookies."""
+        import asyncio
+        from pathlib import Path
+        from tools.cookie_fetcher import fetch_cookies
+
+        cookies_path = deps.config.config_path
+        if cookies_path:
+            cookies_path = str(Path(cookies_path).resolve().parent / ".cookies.json")
+        else:
+            cookies_path = "config/cookies.json"
+
+        try:
+            rc = await fetch_cookies(output=Path(cookies_path))
+            if rc == 0:
+                deps.cookie_manager._load_cookies()
+                return {"ok": True}
+            return {"ok": False, "error": "登录流程未完成"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
     @app.post("/api/v1/download", response_model=JobResponse)
     async def create_job(req: DownloadRequest) -> JobResponse:
         if not req.url:
             raise HTTPException(status_code=400, detail="url is required")
-        job = await manager.submit(req.url)
+        job = await manager.submit(req.url, mode=req.mode, number=req.number,
+                                   path=req.path, thread=req.thread)
         return JobResponse(job_id=job.job_id, status=job.status, url=job.url)
 
     @app.get("/api/v1/jobs/{job_id}")
