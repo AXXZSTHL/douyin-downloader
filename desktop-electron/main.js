@@ -19,12 +19,49 @@ const PROJECT_ROOT = isPackaged ? process.resourcesPath : path.resolve(__dirname
 // ---------------------------------------------------------------------------
 // Python backend
 // ---------------------------------------------------------------------------
+function findPython() {
+  const { execSync } = require('child_process');
+  const cmds = process.platform === 'win32'
+    ? ['python', 'python3', 'py']
+    : ['python3', 'python'];
+
+  for (const cmd of cmds) {
+    try {
+      let realPath = cmd;
+      if (process.platform !== 'win32') {
+        try { realPath = execSync(`which ${cmd} 2>/dev/null`, { encoding: 'utf8' }).trim(); } catch (_) {}
+      }
+      if (realPath) {
+        execSync(`"${realPath}" --version`, { stdio: 'ignore' });
+        return realPath;
+      }
+    } catch (_) {}
+  }
+  return cmds[0];
+}
+
 function startPythonBackend() {
   const launcher = path.join(__dirname, 'desktop_server.py');
-  pythonProcess = spawn('python', [launcher, '--port', String(API_PORT), '--no-browser'], {
+  const pythonCmd = findPython();
+  console.log(`[main] Using Python: ${pythonCmd}`);
+  pythonProcess = spawn(pythonCmd, [launcher, '--port', String(API_PORT), '--no-browser'], {
     cwd: PROJECT_ROOT,
     env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
     stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  pythonProcess.on('error', (err) => {
+    if (err.code === 'ENOENT') {
+      const isMac = process.platform === 'darwin';
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'Python 未找到',
+        message: isMac
+          ? '未找到 Python 3，请安装后重试。\n\n如果已安装但仍报错，请运行：\n  xattr -dr com.apple.quarantine "/Applications/dou+.app"'
+          : '未找到 Python 3，请安装后重试。\n\n从 https://python.org 下载安装。',
+        buttons: ['确定'],
+      }).then(() => app.quit());
+    }
   });
 
   pythonProcess.stdout.on('data', (d) => console.log(`[py] ${d.toString().trim()}`));
