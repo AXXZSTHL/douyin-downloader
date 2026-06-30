@@ -64,10 +64,6 @@
       {
         "from": "../cli",
         "to": "cli"
-      },
-      {
-        "from": "../config.yml",
-        "to": "config.yml"
       }
     ],
     "win": {
