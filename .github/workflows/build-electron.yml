@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -43,7 +44,7 @@ jobs:
 
       - name: Build Electron (${{ matrix.platform }})
         working-directory: desktop-electron
-        run: npx electron-builder --${{ matrix.platform }}
+        run: npx electron-builder --${{ matrix.platform }} --publish never
 
       - name: Upload ${{ matrix.platform }} artifacts
         uses: actions/upload-artifact@v4
