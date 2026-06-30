@@ -40,9 +40,10 @@ jobs:
 
       - name: Download portable Python
         run: |
-          PYTHON_TAG=20250311
-          PYTHON_VER=3.12.8
-          URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_TAG}/cpython-${PYTHON_VER}+${PYTHON_TAG}-${{ matrix.python_target }}-install_only.tar.gz"
+          PYTHON_TAG=20260610
+          PYTHON_VER=3.12.13
+          TRIPLE=${{ matrix.python_target }}
+          URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_TAG}/cpython-${PYTHON_VER}+${PYTHON_TAG}-${TRIPLE}-install_only.tar.gz"
           echo "Downloading $URL"
           curl -fsSL "$URL" -o python.tar.gz
           mkdir -p desktop-electron/python-portable
