@@ -86,7 +86,7 @@ function createWindow() {
     minHeight: 560,
     title: 'dou+',
     backgroundColor: '#000000',
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

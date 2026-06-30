@@ -26,6 +26,8 @@
       "server_launcher.py",
       "desktop_app.py",
       "assets/**/*",
+      "icon.png",
+      "icon.ico",
       "node_modules/**/*"
     ],
     "extraResources": [
@@ -77,14 +79,14 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "icon.png"
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "icon.png",
-      "uninstallerIcon": "icon.png",
-      "installerHeaderIcon": "icon.png"
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
     }
   },
   "devDependencies": {
