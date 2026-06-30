@@ -60,6 +60,18 @@ jobs:
         working-directory: desktop-electron
         run: npx electron-builder --${{ matrix.platform }} --publish never
 
+      - name: Fix auto-update manifest (${{ matrix.platform }})
+        working-directory: desktop-electron/dist
+        run: |
+          # latest*.yml references ${name}-* (dou-plus-*) but files use ${productName}-* (dou+-*)
+          # Patch the YAML to reference the actual file names
+          if [ "${{ matrix.platform }}" = "mac" ]; then
+            sed -i '' 's|dou-plus-|dou+-|g' latest-mac.yml
+          else
+            sed -i 's|dou-plus-|dou+-|g' latest.yml
+          fi
+        shell: bash
+
       - name: Upload ${{ matrix.platform }} artifacts
         uses: actions/upload-artifact@v4
         with:
