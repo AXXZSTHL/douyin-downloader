@@ -1,6 +1,6 @@
 {
   "name": "dou-plus",
-  "version": "3.1.6",
+  "version": "3.1.7",
   "description": "dou+ — 抖音批量下载工具",
   "main": "main.js",
   "author": "AXXZSTHL",
@@ -112,7 +112,11 @@
       "repo": "douyin-downloader"
     },
     "dmg": {
-      "title": "dou+ ${version}"
+      "title": "dou+ ${version}",
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ]
     },
     "nsis": {
       "oneClick": false,
