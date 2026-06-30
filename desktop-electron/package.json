@@ -15,6 +15,7 @@
   "build": {
     "appId": "com.douplus.desktop",
     "productName": "dou+",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "asar": false,
     "directories": {
       "output": "dist"
