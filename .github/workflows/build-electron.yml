@@ -1,4 +1,4 @@
-name: Build Electron (Windows)
+name: Build Electron
 
 on:
   push:
@@ -10,7 +10,17 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact_glob: 'desktop-electron/dist/*.exe desktop-electron/dist/*.blockmap'
+          - os: macos-latest
+            platform: mac
+            artifact_glob: 'desktop-electron/dist/*.dmg desktop-electron/dist/*.zip desktop-electron/dist/*.blockmap'
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -33,15 +43,13 @@ jobs:
         working-directory: desktop-electron
         run: npm ci
 
-      - name: Build Electron app
+      - name: Build Electron (${{ matrix.platform }})
         working-directory: desktop-electron
-        run: npx electron-builder --win
+        run: npx electron-builder --${{ matrix.platform }}
 
-      - name: Create Release
+      - name: Upload artifacts
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            desktop-electron/dist/*.exe
-            desktop-electron/dist/*.blockmap
+          files: ${{ matrix.artifact_glob }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

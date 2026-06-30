@@ -9,6 +9,7 @@
     "dev": "electron . --dev",
     "build": "electron-builder",
     "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
     "build:portable": "electron-builder --win portable"
   },
   "build": {
@@ -28,6 +29,7 @@
       "assets/**/*",
       "icon.png",
       "icon.ico",
+      "icon_512.png",
       "node_modules/**/*"
     ],
     "extraResources": [
@@ -80,6 +82,19 @@
         }
       ],
       "icon": "icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "icon_512.png",
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
+      "title": "dou+ ${version}"
     },
     "nsis": {
       "oneClick": false,
