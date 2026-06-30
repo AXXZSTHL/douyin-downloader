@@ -44,6 +44,9 @@ dy_downloader.db-wal
 # Runtime job persistence (not source)
 config/jobs.json
 
+# Bundled Python portable (CI-only, not committed)
+desktop-electron/python-portable/
+
 # Local config/secrets
 config*.yml
 !config.example.yml

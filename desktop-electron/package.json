@@ -34,6 +34,10 @@
     ],
     "extraResources": [
       {
+        "from": "python-portable",
+        "to": "python-portable"
+      },
+      {
         "from": "../server",
         "to": "server"
       },

@@ -20,11 +20,32 @@ const PROJECT_ROOT = isPackaged ? process.resourcesPath : path.resolve(__dirname
 // Python backend
 // ---------------------------------------------------------------------------
 function findPython() {
+  const fs = require('fs');
+  // 1) Bundled portable Python (packaged app)
+  if (isPackaged) {
+    const base = path.join(process.resourcesPath, 'python-portable');
+    const candidates = process.platform === 'win32'
+      ? [path.join(base, 'python.exe')]
+      : [path.join(base, 'bin', 'python3'), path.join(base, 'bin', 'python')];
+    for (const p of candidates) {
+      try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (_) {}
+    }
+  }
+  // 2) Bundled portable Python (dev mode — local checkout)
+  {
+    const base = path.join(__dirname, 'python-portable');
+    const candidates = process.platform === 'win32'
+      ? [path.join(base, 'python.exe')]
+      : [path.join(base, 'bin', 'python3'), path.join(base, 'bin', 'python')];
+    for (const p of candidates) {
+      try { fs.accessSync(p, fs.constants.X_OK); return p; } catch (_) {}
+    }
+  }
+  // 3) System Python (fallback)
   const { execSync } = require('child_process');
   const cmds = process.platform === 'win32'
     ? ['python', 'python3', 'py']
     : ['python3', 'python'];
-
   for (const cmd of cmds) {
     try {
       let realPath = cmd;
@@ -37,7 +58,7 @@ function findPython() {
       }
     } catch (_) {}
   }
-  return cmds[0];
+  return process.platform === 'win32' ? 'python' : 'python3';
 }
 
 function startPythonBackend() {
