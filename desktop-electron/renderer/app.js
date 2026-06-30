@@ -60,6 +60,7 @@ async function loadUserInfo() {
   if (!d || !d.ok) {
     D.nickname.textContent = '未登录'; D.statFlw.textContent = '-'; D.statFlr.textContent = '-'; D.statAwm.textContent = '-';
     D.avatar.style.display = 'none'; D.avatarPh.style.display = ''; D.btnLogin.style.display = ''; D.btnRefresh.style.display = 'none';
+    if (d && d.error) toast('加载用户信息失败: ' + d.error, 'err');
     return;
   }
   D.nickname.textContent = d.nickname || '?'; D.statFlw.textContent = fmt(d.following_count);

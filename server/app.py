@@ -47,6 +47,9 @@ def _extract_posts(items: list) -> list:
     return posts
 
 
+class SaveCookiesRequest(BaseModel):
+    cookies: dict = {}
+
 class DownloadRequest(BaseModel):
     url: str
     mode: str = "post"
@@ -219,6 +222,27 @@ def build_app(config: ConfigLoader) -> FastAPI:
     app.state.job_manager = manager
     app.state.deps = deps
 
+    @app.post("/api/v1/save-cookies")
+    async def save_cookies(req: SaveCookiesRequest) -> Dict[str, Any]:
+        """Receive cookies from Electron login window."""
+        import json
+        from pathlib import Path
+        from utils.cookie_utils import sanitize_cookies
+        from tools.cookie_fetcher import update_config
+
+        cookies = sanitize_cookies(req.cookies or {})
+        if not cookies:
+            return {"ok": False, "error": "空 Cookie"}
+        # Save to file
+        cp = Path("config/cookies.json")
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        cp.write_text(json.dumps(cookies, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Update config.yml
+        if deps.config.config_path:
+            update_config(Path(deps.config.config_path), cookies)
+        deps.cookie_manager.set_cookies(cookies)
+        return {"ok": True, "count": len(cookies)}
+
     @app.get("/api/v1/health")
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
@@ -229,7 +253,10 @@ def build_app(config: ConfigLoader) -> FastAPI:
         from core import DouyinAPIClient
 
         try:
-            async with DouyinAPIClient(deps.cookie_manager.get_cookies()) as api:
+            cookies = deps.cookie_manager.get_cookies()
+            if not cookies:
+                return {"ok": False, "error": "未找到 Cookie，请先登录"}
+            async with DouyinAPIClient(cookies) as api:
                 user = await api.get_self_info()
                 if user:
                     # Extract avatar URL from various formats
@@ -246,7 +273,7 @@ def build_app(config: ConfigLoader) -> FastAPI:
                         "following_count": user.get("following_count", 0),
                         "aweme_count": user.get("aweme_count", 0),
                     }
-                return {"ok": False, "error": "无法获取用户信息，请检查登录状态"}
+                return {"ok": False, "error": "API 未返回用户信息，Cookie 可能已过期"}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -375,26 +402,112 @@ def build_app(config: ConfigLoader) -> FastAPI:
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
+    @app.post("/api/v1/logout")
+    async def logout() -> Dict[str, Any]:
+        """Clear all cookies."""
+        from pathlib import Path
+
+        deps.cookie_manager.clear_cookies()
+        # Also clear config cookies
+        if deps.config.config_path:
+            from tools.cookie_fetcher import update_config
+
+            update_config(Path(deps.config.config_path), {})
+        # Remove cookie file
+        cookie_file = Path("config/cookies.json")
+        if cookie_file.exists():
+            cookie_file.unlink()
+        return {"ok": True}
+
     @app.post("/api/v1/login")
     async def trigger_login() -> Dict[str, Any]:
-        """Trigger browser login and return captured cookies."""
-        import asyncio
+        """Open browser, poll for login, auto-close, return cookies."""
+        import json, asyncio
         from pathlib import Path
-        from tools.cookie_fetcher import fetch_cookies
+        from urllib.parse import parse_qs, urlparse
 
-        cookies_path = deps.config.config_path
-        if cookies_path:
-            cookies_path = str(Path(cookies_path).resolve().parent / ".cookies.json")
-        else:
-            cookies_path = "config/cookies.json"
+        cookies_path = Path(deps.config.config_path).resolve().parent / ".cookies.json" \
+            if deps.config.config_path else Path("config/cookies.json")
+
+        from tools.cookie_fetcher import (
+            extract_ms_token_from_text, filter_cookies,
+            goto_with_fallback, try_extract_ms_token, update_config,
+        )
+        from utils.cookie_utils import sanitize_cookies
+
+        # Ensure Chromium is installed
+        import subprocess, sys
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            return {"ok": False, "error": "请先安装: pip install playwright && python -m playwright install chromium"}
+
+        # Auto-install Chromium if needed
+        try:
+            async with async_playwright() as p:
+                await p.chromium.launch(headless=True).close()
+        except Exception:
+            logger.info("Chromium not found, auto-installing...")
+            try:
+                subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"],
+                               capture_output=True, timeout=300)
+            except Exception:
+                return {"ok": False, "error": "Chromium 安装失败，请手动运行: python -m playwright install chromium"}
 
         try:
-            rc = await fetch_cookies(output=Path(cookies_path))
-            if rc == 0:
-                deps.cookie_manager._load_cookies()
-                return {"ok": True}
-            return {"ok": False, "error": "登录流程未完成"}
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=False)
+                context = await browser.new_context()
+                page = await context.new_page()
+                observed_headers = []
+                observed_tokens = []
+
+                def _on_req(request):
+                    try:
+                        h = request.headers or {}
+                        ch = h.get("cookie")
+                        if ch: observed_headers.append(ch)
+                        q = parse_qs(urlparse(request.url or "").query)
+                        if "msToken" in q and q["msToken"]:
+                            observed_tokens.append((q["msToken"][0] or "").strip())
+                        t = extract_ms_token_from_text(request.url or "")
+                        if t: observed_tokens.append(t)
+                    except Exception: pass
+
+                page.on("request", _on_req)
+                await goto_with_fallback(page, "https://www.douyin.com/")
+
+                logged_in = False
+                for _ in range(90):
+                    await asyncio.sleep(2)
+                    try:
+                        st = await context.storage_state()
+                        ck = {c["name"]: c["value"] for c in st["cookies"] if "douyin" in c.get("domain", "")}
+                        # Check for login — need passport_csrf_token AND (sessionid OR sessionid_ss)
+                        has_csrf = bool(ck.get("passport_csrf_token"))
+                        has_session = bool(ck.get("sessionid") or ck.get("sessionid_ss"))
+                        if has_csrf and has_session:
+                            all_cookies = sanitize_cookies(ck)
+                            ms = await try_extract_ms_token(page, all_cookies, observed_headers, observed_tokens)
+                            if ms and not all_cookies.get("msToken"): all_cookies["msToken"] = ms
+                            picked = filter_cookies(all_cookies)
+                            picked = sanitize_cookies(picked)
+                            cookies_path.parent.mkdir(parents=True, exist_ok=True)
+                            cookies_path.write_text(json.dumps(picked, ensure_ascii=False, indent=2), encoding="utf-8")
+                            if deps.config.config_path: update_config(Path(deps.config.config_path), picked)
+                            deps.cookie_manager._load_cookies()
+                            logged_in = True
+                            break
+                    except Exception: pass
+
+                await context.close()
+                await browser.close()
+
+                if logged_in:
+                    return {"ok": True, "cookie_count": len(picked)}
+                return {"ok": False, "error": "登录超时，请在 3 分钟内扫码登录"}
         except Exception as exc:
+            logger.exception("Login failed")
             return {"ok": False, "error": str(exc)}
 
     @app.post("/api/v1/download", response_model=JobResponse)

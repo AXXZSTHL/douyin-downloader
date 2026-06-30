@@ -300,12 +300,15 @@ ipcMain.handle('app:login', async () => {
       try {
         const allCk = await ses.cookies.get({});
         const hasSession = allCk.some(c => c.name === 'sessionid' || c.name === 'sessionid_ss');
-        if (!hasSession) return;
+        const hasCsrf = allCk.some(c => c.name === 'passport_csrf_token');
+        if (!hasSession || !hasCsrf) return;
 
         resolved = true;
+        // Collect all likely-relevant cookies — don't filter by domain,
+        // some cookies may have null/empty domain (host-only cookies)
         const cookies = {};
         for (const c of allCk) {
-          if (c.domain && c.domain.includes('douyin')) {
+          if (!c.domain || c.domain.includes('douyin') || c.domain.includes('snssdk')) {
             cookies[c.name] = c.value;
           }
         }
@@ -347,7 +350,8 @@ ipcMain.handle('app:login', async () => {
       e.preventDefault();
       ses.cookies.get({}).then(allCk => {
         const hasSession = allCk.some(c => c.name === 'sessionid' || c.name === 'sessionid_ss');
-        if (hasSession && !resolved) { checkLogin(); return; }
+        const hasCsrf = allCk.some(c => c.name === 'passport_csrf_token');
+        if (hasSession && hasCsrf && !resolved) { checkLogin(); return; }
         setImmediate(() => { if (!loginWin.isDestroyed()) loginWin.destroy(); });
       }).catch(() => {
         setImmediate(() => { if (!loginWin.isDestroyed()) loginWin.destroy(); });
