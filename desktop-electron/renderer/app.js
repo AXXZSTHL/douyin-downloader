@@ -71,9 +71,12 @@ async function loadUserInfo() {
   D.btnLogin.style.display = 'none'; D.btnRefresh.style.display = ''; toast('已登录: ' + d.nickname, 'ok');
 }
 async function triggerLogin() {
-  D.btnLogin.disabled = true; D.btnLogin.textContent = '正在打开浏览器...'; toast('请在浏览器中完成抖音登录', 'info');
-  var d = await POST('/api/v1/login'); D.btnLogin.disabled = false; D.btnLogin.textContent = '浏览器登录';
-  if (d && d.ok) { toast('登录成功', 'ok'); await loadUserInfo(); } else toast('登录失败', 'err');
+  D.btnLogin.disabled = true; D.btnLogin.textContent = '正在打开登录窗口...';
+  toast('请在弹出的窗口中扫码登录抖音', 'info');
+  var d = await api.login();
+  D.btnLogin.disabled = false; D.btnLogin.textContent = '浏览器登录';
+  if (d && d.ok) { toast('登录成功!', 'ok'); await loadUserInfo(); return; }
+  toast('登录失败: ' + ((d && d.error) || '登录窗口已关闭'), 'err');
 }
 
 /* ============================== HOT TRENDS ============================== */
@@ -429,6 +432,15 @@ D.btnPostsMore.addEventListener('click', () => loadUserPosts());
 $('#btn-posts-batch-dl').addEventListener('click', downloadSelectedPosts);
 $('#btn-posts-batch-clear').addEventListener('click', () => { selectedPosts.clear(); updatePostsBatch(); renderPosts(); });
 $('#btn-browse-path').addEventListener('click', async () => { var dir = await api.openDirectory(); if (dir) { D.settingPath.value = dir; localStorage.setItem('dlPath', dir); } });
+$('#btn-logout').addEventListener('click', async () => {
+  var d = await POST('/api/v1/logout');
+  if (d && d.ok) {
+    D.nickname.textContent = '未登录'; D.statFlw.textContent = '-'; D.statFlr.textContent = '-'; D.statAwm.textContent = '-';
+    D.avatar.style.display = 'none'; D.avatarPh.style.display = '';
+    D.btnLogin.style.display = ''; D.btnRefresh.style.display = 'none';
+    toast('已退出登录', 'ok');
+  } else { toast('退出失败', 'err'); }
+});
 D.pages.following.addEventListener('scroll', () => { var el = D.pages.following; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200 && flwHasMore && !flwLoading && !(D.flwSearch.value || '').trim()) loadFollowing(true); });
 D.userDetail.addEventListener('scroll', () => { if (D.userDetail.scrollTop + D.userDetail.clientHeight >= D.userDetail.scrollHeight - 200 && detailHasMore && !detailLoading) loadUserPosts(); });
 
@@ -441,6 +453,30 @@ async function loadTaskHistory() {
   var d = await GET('/api/v1/jobs');
   if (d && d.jobs) { activeJobs = d.jobs; renderTasks(); }
 }
+
+/* ============================== AUTO UPDATE ============================== */
+var updateStatusEl = $('#update-status'), updateBtnEl = $('#btn-check-update');
+function showUpdateStatus(type, msg) {
+  if (!updateStatusEl) return;
+  updateStatusEl.style.display = ''; updateStatusEl.textContent = msg;
+  updateStatusEl.className = type === 'downloading' ? 'update-downloading' : (type === 'ready' ? 'update-ready' : '');
+  if (updateBtnEl) updateBtnEl.style.display = (type === 'none' || type === 'error') ? '' : 'none';
+}
+api.onUpdateStatus(function (info) {
+  switch (info.type) {
+    case 'available': showUpdateStatus('available', '发现新版本 v' + info.version + '，正在等待确认...'); break;
+    case 'downloading': showUpdateStatus('downloading', '正在下载更新... ' + (info.percent || 0) + '%'); break;
+    case 'downloaded': showUpdateStatus('ready', '更新已下载，重启后生效'); break;
+    case 'none': showUpdateStatus('none', '已是最新版本'); break;
+    case 'error': showUpdateStatus('error', '检查更新失败: ' + (info.message || '')); break;
+  }
+});
+if (updateBtnEl) updateBtnEl.addEventListener('click', function () { showUpdateStatus('downloading', '正在检查...'); api.checkUpdate(); });
+// Show check button and version for packaged app
+api.isPackaged().then(function (p) {
+  if (p && updateBtnEl) updateBtnEl.style.display = '';
+});
+api.getVersion().then(function (v) { var el = $('#app-version'); if (el) el.textContent = v || '3.0.0'; });
 
 /* INIT */
 api.getDownloadsPath().then(p => { var saved = localStorage.getItem('dlPath'); D.settingPath.value = saved || (p + (navigator.platform.includes('Win') ? '\\' : '/')); });

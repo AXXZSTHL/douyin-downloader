@@ -74,11 +74,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "icon.ico"
@@ -87,11 +91,19 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "icon_512.png",
       "category": "public.app-category.utilities"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "AXXZSTHL",
+      "repo": "douyin-downloader"
     },
     "dmg": {
       "title": "dou+ ${version}"
@@ -107,5 +119,8 @@
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

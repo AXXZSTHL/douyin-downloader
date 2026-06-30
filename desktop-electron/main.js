@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 const http = require('http');
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
 let pythonProcess = null;
@@ -120,17 +121,174 @@ ipcMain.handle('app:getDownloadsPath', () => {
   return path.join(os.homedir(), 'Downloads');
 });
 ipcMain.handle('app:getPlatform', () => process.platform);
+ipcMain.handle('app:getVersion', () => app.getVersion());
+ipcMain.handle('app:isPackaged', () => isPackaged);
 ipcMain.handle('shell:openPath', async (_e, p) => shell.openPath(p));
+
+// ---------------------------------------------------------------------------
+// Auto-updater
+// ---------------------------------------------------------------------------
+let updateDownloaded = false;
+
+function setupAutoUpdater() {
+  if (isPackaged) {
+    autoUpdater.autoDownload = false; // let user decide
+    autoUpdater.allowDowngrade = false;
+  }
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update:status', {
+      type: 'available',
+      version: info.version,
+    });
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '发现新版本',
+      message: `dou+ ${info.version} 可用，是否下载更新？`,
+      buttons: ['下载更新', '稍后提醒'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        mainWindow?.webContents.send('update:status', { type: 'downloading' });
+        autoUpdater.downloadUpdate();
+      }
+    });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    mainWindow?.webContents.send('update:status', {
+      type: 'downloading',
+      percent: Math.floor(progress.percent),
+    });
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    updateDownloaded = true;
+    mainWindow?.webContents.send('update:status', { type: 'downloaded' });
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '更新已下载',
+      message: '更新已下载完毕，是否立即重启安装？',
+      buttons: ['立即重启', '稍后'],
+      defaultId: 0,
+    }).then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update:status', {
+      type: 'error',
+      message: err.message,
+    });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update:status', { type: 'none' });
+  });
+}
+
+ipcMain.handle('app:checkUpdate', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { ok: true, version: result?.updateInfo?.version };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('app:downloadUpdate', async () => {
+  mainWindow?.webContents.send('update:status', { type: 'downloading' });
+  autoUpdater.downloadUpdate();
+});
+
+ipcMain.handle('app:installUpdate', async () => {
+  if (updateDownloaded) autoUpdater.quitAndInstall();
+});
+
+// Login via Electron's built-in Chromium
+ipcMain.handle('app:login', async () => {
+  return new Promise((resolve) => {
+    const loginWin = new BrowserWindow({
+      width: 520,
+      height: 780,
+      minWidth: 400,
+      minHeight: 600,
+      title: '抖音登录 — dou+',
+      parent: mainWindow,
+      modal: true,
+      webPreferences: { nodeIntegration: false, contextIsolation: true },
+      autoHideMenuBar: true,
+    });
+
+    loginWin.loadURL('https://www.douyin.com/?recommend=1');
+    loginWin.webContents.on('did-navigate', checkLogin);
+    loginWin.webContents.on('did-navigate-in-page', checkLogin);
+
+    let resolved = false;
+    async function checkLogin() {
+      if (resolved) return;
+      try {
+        const ck = await loginWin.webContents.session.cookies.get({ domain: '.douyin.com' });
+        const allCk = await loginWin.webContents.session.cookies.get({});
+        // Check for login indicators
+        const hasSession = allCk.some(c => c.name === 'sessionid' || c.name === 'sessionid_ss');
+        const hasCsrf = allCk.some(c => c.name === 'passport_csrf_token');
+        if (hasSession && hasCsrf) {
+          resolved = true;
+          // Collect all douyin cookies
+          const cookies = {};
+          for (const c of allCk) {
+            if (c.domain && c.domain.includes('douyin')) {
+              cookies[c.name] = c.value;
+            }
+          }
+          // Send to backend
+          const http = require('http');
+          const data = JSON.stringify({ cookies });
+          const req = http.request({
+            hostname: API_HOST, port: API_PORT,
+            path: '/api/v1/save-cookies', method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          }, (res) => {
+            let body = '';
+            res.on('data', (d) => body += d);
+            res.on('end', () => {
+              try { resolve(JSON.parse(body)); } catch (_) { resolve({ ok: true }); }
+            });
+          });
+          req.on('error', () => resolve({ ok: false, error: '保存Cookie失败' }));
+          req.write(data); req.end();
+          loginWin.close();
+        }
+      } catch (_) {}
+    }
+
+    loginWin.on('closed', () => {
+      if (!resolved) resolve({ ok: false, error: '登录窗口已关闭' });
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 app.whenReady().then(async () => {
+  setupAutoUpdater();
   startPythonBackend();
   const ready = await waitForServer();
   if (ready) console.log('[main] Python backend ready');
   else console.log('[main] WARNING: Python backend may not be ready');
   createWindow();
+
+  // Auto-check for updates in production, delay a few seconds for UI to load
+  if (isPackaged) {
+    setTimeout(() => {
+      autoUpdater.checkForUpdates().catch(() => {});
+    }, 5000);
+  }
 });
 
 app.on('window-all-closed', () => {

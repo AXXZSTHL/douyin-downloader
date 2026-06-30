@@ -138,28 +138,59 @@
     <!-- === SETTINGS PAGE === -->
     <div id="page-settings" class="page">
       <div class="page-header"><h2>设置</h2></div>
-      <div style="max-width:500px;display:flex;flex-direction:column;gap:20px">
-        <div class="settings-group">
-          <label class="settings-group-title">下载路径</label>
-          <div style="display:flex;gap:8px">
-            <input type="text" id="setting-path" style="flex:1;padding:10px 14px;border:1px solid #222;border-radius:12px;background:#161616;color:#fff;font-size:13px;outline:none" />
-            <button id="btn-browse-path" class="btn-primary-sm" style="padding:8px 16px">浏览</button>
+      <div id="settings-scroll" style="max-width:520px;display:flex;flex-direction:column;gap:0;padding:0 32px">
+        <div class="settings-card">
+          <div class="settings-card-title">📁 下载路径</div>
+          <div class="settings-card-body">
+            <input type="text" id="setting-path" placeholder="选择下载目录..." />
+            <button id="btn-browse-path" class="btn-primary-sm">浏览</button>
           </div>
         </div>
-        <div class="settings-group">
-          <label class="settings-group-title">并发线程</label>
-          <div class="stepper" style="width:fit-content">
-            <button class="stepper-btn" data-action="down">-</button>
-            <span id="setting-threads" style="width:40px;text-align:center;font-size:14px;font-weight:600;line-height:30px">5</span>
-            <button class="stepper-btn" data-action="up">+</button>
+        <div class="settings-card">
+          <div class="settings-card-title">⚡ 并发线程</div>
+          <div class="settings-card-body">
+            <div class="stepper">
+              <button class="stepper-btn" data-action="down">-</button>
+              <span id="setting-threads">5</span>
+              <button class="stepper-btn" data-action="up">+</button>
+            </div>
+            <span style="font-size:11px;color:#666;margin-left:12px">同时下载的视频数量（1-20）</span>
           </div>
         </div>
-        <div class="settings-group">
-          <label class="settings-group-title">数据库</label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#999">
-            <input type="checkbox" id="setting-db" checked style="accent-color:var(--pink)" />
-            启用去重数据库
-          </label>
+        <div class="settings-card">
+          <div class="settings-card-title">💾 数据库</div>
+          <div class="settings-card-body">
+            <label class="toggle-row">
+              <span>启用去重数据库</span>
+              <input type="checkbox" id="setting-db" checked />
+              <span class="toggle-hint">已下载的视频不会重复下载</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-card-title">🔔 下载完成提示音</div>
+          <div class="settings-card-body">
+            <label class="toggle-row">
+              <span>开启提示音</span>
+              <input type="checkbox" id="setting-sound" checked />
+            </label>
+          </div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-card-title">📱 关于 dou+</div>
+          <div class="settings-card-body" style="flex-direction:column;align-items:flex-start;gap:4px">
+            <span style="font-size:13px;color:var(--text2)">版本 <span id="app-version">3.0.0</span></span>
+            <span style="font-size:11px;color:var(--text3)">抖音批量下载工具 · 基于 Electron</span>
+            <div id="update-status" style="font-size:12px;margin-top:6px;display:none"></div>
+            <button id="btn-check-update" class="btn-text-only" style="font-size:12px;color:var(--pink);margin-top:4px;display:none">检查更新</button>
+          </div>
+        </div>
+        <div class="settings-card" style="border-color:rgba(231,76,60,0.3)">
+          <div class="settings-card-body" style="justify-content:center">
+            <button id="btn-logout" style="padding:10px 32px;border:1px solid rgba(231,76,60,0.5);border-radius:20px;background:none;color:#e74c3c;font-size:13px;font-weight:600;cursor:pointer;transition:all var(--ease)">
+              退出抖音登录
+            </button>
+          </div>
         </div>
       </div>
     </div>
