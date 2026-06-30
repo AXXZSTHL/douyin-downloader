@@ -15,10 +15,8 @@ jobs:
         include:
           - os: windows-latest
             platform: win
-            artifact_glob: 'desktop-electron/dist/*.exe desktop-electron/dist/*.blockmap'
           - os: macos-latest
             platform: mac
-            artifact_glob: 'desktop-electron/dist/*.dmg desktop-electron/dist/*.zip desktop-electron/dist/*.blockmap'
 
     runs-on: ${{ matrix.os }}
 
@@ -47,9 +45,30 @@ jobs:
         working-directory: desktop-electron
         run: npx electron-builder --${{ matrix.platform }}
 
-      - name: Upload artifacts
+      - name: Upload ${{ matrix.platform }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: desktop-electron/dist/*
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: dist-artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la dist-artifacts/
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact_glob }}
+          files: dist-artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
