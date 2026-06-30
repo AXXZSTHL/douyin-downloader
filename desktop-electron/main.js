@@ -269,6 +269,8 @@ ipcMain.handle('app:installUpdate', async () => {
 // Login via Electron's built-in Chromium
 ipcMain.handle('app:login', async () => {
   return new Promise((resolve) => {
+    // Unique partition so each login attempt starts fresh (no stale cookies)
+    const partition = 'douyin-login-' + Date.now();
     const loginWin = new BrowserWindow({
       width: 520,
       height: 780,
@@ -277,56 +279,86 @@ ipcMain.handle('app:login', async () => {
       title: '抖音登录 — dou+',
       parent: mainWindow,
       modal: true,
-      webPreferences: { nodeIntegration: false, contextIsolation: true },
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        partition: partition,
+      },
       autoHideMenuBar: true,
     });
 
-    loginWin.loadURL('https://www.douyin.com/?recommend=1');
-    loginWin.webContents.on('did-navigate', checkLogin);
-    loginWin.webContents.on('did-navigate-in-page', checkLogin);
-
     let resolved = false;
+    const ses = loginWin.webContents.session;
+
+    // Detect cookie changes in real time — more reliable than navigation events
+    ses.cookies.on('changed', () => {
+      if (!resolved) checkLogin();
+    });
+
     async function checkLogin() {
       if (resolved) return;
       try {
-        const ck = await loginWin.webContents.session.cookies.get({ domain: '.douyin.com' });
-        const allCk = await loginWin.webContents.session.cookies.get({});
-        // Check for login indicators
+        const allCk = await ses.cookies.get({});
         const hasSession = allCk.some(c => c.name === 'sessionid' || c.name === 'sessionid_ss');
-        const hasCsrf = allCk.some(c => c.name === 'passport_csrf_token');
-        if (hasSession && hasCsrf) {
-          resolved = true;
-          // Collect all douyin cookies
-          const cookies = {};
-          for (const c of allCk) {
-            if (c.domain && c.domain.includes('douyin')) {
-              cookies[c.name] = c.value;
-            }
+        if (!hasSession) return;
+
+        resolved = true;
+        const cookies = {};
+        for (const c of allCk) {
+          if (c.domain && c.domain.includes('douyin')) {
+            cookies[c.name] = c.value;
           }
-          // Send to backend
-          const http = require('http');
-          const data = JSON.stringify({ cookies });
+        }
+
+        const http = require('http');
+        const data = JSON.stringify({ cookies });
+        await new Promise((res, rej) => {
           const req = http.request({
             hostname: API_HOST, port: API_PORT,
             path: '/api/v1/save-cookies', method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-          }, (res) => {
+          }, (r) => {
             let body = '';
-            res.on('data', (d) => body += d);
-            res.on('end', () => {
-              try { resolve(JSON.parse(body)); } catch (_) { resolve({ ok: true }); }
+            r.on('data', d => body += d);
+            r.on('end', () => {
+              try { res(JSON.parse(body)); } catch (_) { res({ ok: true }); }
             });
           });
-          req.on('error', () => resolve({ ok: false, error: '保存Cookie失败' }));
+          req.on('error', rej);
           req.write(data); req.end();
-          loginWin.close();
-        }
+        }).catch(() => {});
+
+        loginWin.close();
+        resolve({ ok: true });
       } catch (_) {}
     }
+
+    // Backup: check on navigation too (handles SPA-like login flows)
+    loginWin.webContents.on('did-navigate', () => {
+      setTimeout(checkLogin, 1200);
+    });
+    loginWin.webContents.on('did-navigate-in-page', () => {
+      setTimeout(checkLogin, 800);
+    });
+
+    // Last-resort: when window is closing, try one more cookie check
+    loginWin.on('close', (e) => {
+      if (resolved) return;
+      e.preventDefault();
+      ses.cookies.get({}).then(allCk => {
+        const hasSession = allCk.some(c => c.name === 'sessionid' || c.name === 'sessionid_ss');
+        if (hasSession && !resolved) { checkLogin(); return; }
+        setImmediate(() => { if (!loginWin.isDestroyed()) loginWin.destroy(); });
+      }).catch(() => {
+        setImmediate(() => { if (!loginWin.isDestroyed()) loginWin.destroy(); });
+      });
+    });
 
     loginWin.on('closed', () => {
       if (!resolved) resolve({ ok: false, error: '登录窗口已关闭' });
     });
+
+    loginWin.loadURL('https://www.douyin.com/?recommend=1');
   });
 });
 
