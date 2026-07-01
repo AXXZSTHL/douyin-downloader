@@ -377,11 +377,12 @@ app.whenReady().then(async () => {
   else console.log('[main] WARNING: Python backend may not be ready');
   createWindow();
 
-  // Auto-check for updates in production, delay a few seconds for UI to load
+  // Auto-check for updates on startup, then every 30 minutes
   if (isPackaged) {
-    setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+    setInterval(() => {
       autoUpdater.checkForUpdates().catch(() => {});
-    }, 5000);
+    }, 30 * 60 * 1000);
   }
 });
 
