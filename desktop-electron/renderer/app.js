@@ -63,21 +63,33 @@ function switchPage(name) {
 }
 
 /* ============================== USER ============================== */
+var _userLoaded = false;
 async function loadUserInfo() {
-  var d = await GET('/api/v1/user');
-  if (!d || !d.ok) {
-    D.nickname.textContent = '未登录'; D.statFlw.textContent = '-'; D.statFlr.textContent = '-'; D.statAwm.textContent = '-';
-    D.avatar.style.display = 'none'; D.avatarPh.style.display = ''; D.btnLogin.style.display = ''; D.btnRefresh.style.display = 'none';
-    if (d && d.error) toast('加载用户信息失败: ' + d.error, 'err');
-    return;
+  var loadingEl = $('#user-loading');
+  D.btnLogin.style.display = 'none';
+  if (loadingEl) loadingEl.style.display = '';
+  for (var i = 0; i < 20; i++) {
+    D.nickname.textContent = i === 0 ? '连接中...' : ('加载中 (' + ((i + 1) * 2) + 's)...');
+    var d = await GET('/api/v1/user');
+    if (d && d.ok) {
+      D.nickname.textContent = d.nickname || '?'; D.statFlw.textContent = fmt(d.following_count);
+      D.statFlr.textContent = fmt(d.follower_count); D.statAwm.textContent = fmt(d.aweme_count);
+      var av = ''; if (typeof d.avatar === 'string') av = d.avatar;
+      else if (d.avatar && d.avatar.url_list) av = d.avatar.url_list[0] || '';
+      if (av) { D.avatar.src = av; D.avatar.style.display = ''; D.avatarPh.style.display = 'none'; }
+      else { D.avatar.style.display = 'none'; D.avatarPh.style.display = ''; }
+      D.btnLogin.style.display = 'none'; D.btnRefresh.style.display = '';
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (!_userLoaded) { toast('已登录: ' + d.nickname, 'ok'); _userLoaded = true; }
+      return;
+    }
+    await new Promise(function (r) { return setTimeout(r, 2000); });
   }
-  D.nickname.textContent = d.nickname || '?'; D.statFlw.textContent = fmt(d.following_count);
-  D.statFlr.textContent = fmt(d.follower_count); D.statAwm.textContent = fmt(d.aweme_count);
-  var av = ''; if (typeof d.avatar === 'string') av = d.avatar;
-  else if (d.avatar && d.avatar.url_list) av = d.avatar.url_list[0] || '';
-  if (av) { D.avatar.src = av; D.avatar.style.display = ''; D.avatarPh.style.display = 'none'; }
-  else { D.avatar.style.display = 'none'; D.avatarPh.style.display = ''; }
-  D.btnLogin.style.display = 'none'; D.btnRefresh.style.display = ''; toast('已登录: ' + d.nickname, 'ok');
+  if (loadingEl) loadingEl.style.display = 'none';
+  D.nickname.textContent = '未登录';
+  D.statFlw.textContent = '-'; D.statFlr.textContent = '-'; D.statAwm.textContent = '-';
+  D.avatar.style.display = 'none'; D.avatarPh.style.display = '';
+  D.btnLogin.style.display = ''; D.btnRefresh.style.display = 'none';
 }
 async function triggerLogin() {
   D.btnLogin.disabled = true; D.btnLogin.textContent = '正在打开登录窗口...';

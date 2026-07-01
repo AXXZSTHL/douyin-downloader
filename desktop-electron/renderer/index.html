@@ -24,18 +24,19 @@
   <aside id="sidebar">
     <div id="user-card">
       <div id="user-avatar-wrap">
-        <img id="user-avatar" src="" />
+        <img id="user-avatar" src="" style="display:none" onerror="this.style.display='none'" />
         <div id="user-avatar-placeholder">
           <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="16" r="8" fill="#555"/><ellipse cx="24" cy="44" rx="18" ry="12" fill="#555"/></svg>
         </div>
       </div>
-      <div id="user-nickname">未登录</div>
+      <div id="user-nickname">连接中...</div>
       <div id="user-stats">
         <div class="stat"><span class="stat-num" id="stat-following">-</span><span class="stat-label">关注</span></div>
         <div class="stat"><span class="stat-num" id="stat-follower">-</span><span class="stat-label">粉丝</span></div>
         <div class="stat"><span class="stat-num" id="stat-aweme">-</span><span class="stat-label">作品</span></div>
       </div>
-      <button id="btn-login" class="btn-primary">浏览器登录</button>
+      <div id="user-loading"><span></span><span></span><span></span></div>
+      <button id="btn-login" class="btn-primary" style="display:none">浏览器登录</button>
       <button id="btn-refresh-user" class="btn-text-only" style="display:none">刷新信息</button>
     </div>
     <nav id="sidebar-nav">
@@ -144,58 +145,69 @@
     <!-- === SETTINGS PAGE === -->
     <div id="page-settings" class="page">
       <div class="page-header"><h2>设置</h2></div>
-      <div id="settings-scroll" style="max-width:520px;display:flex;flex-direction:column;gap:0;padding:0 32px">
-        <div class="settings-card">
-          <div class="settings-card-title">📁 下载路径</div>
-          <div class="settings-card-body">
+      <div class="settings-wrap">
+
+        <div class="set-section">
+          <div class="set-label">下载位置</div>
+          <div class="set-row">
             <input type="text" id="setting-path" placeholder="选择下载目录..." />
-            <button id="btn-browse-path" class="btn-primary-sm">浏览</button>
+            <button id="btn-browse-path" class="set-btn">浏览</button>
           </div>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-title">⚡ 并发线程</div>
-          <div class="settings-card-body">
+
+        <div class="set-section">
+          <div class="set-label">并发线程</div>
+          <div class="set-row">
             <div class="stepper">
               <button class="stepper-btn" data-action="down">-</button>
               <span id="setting-threads">5</span>
               <button class="stepper-btn" data-action="up">+</button>
             </div>
-            <span style="font-size:11px;color:#666;margin-left:12px">同时下载的视频数量（1-20）</span>
+            <span class="set-desc">同时下载 1-20 个视频</span>
           </div>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-title">💾 数据库</div>
-          <div class="settings-card-body">
-            <label class="toggle-row">
-              <span>启用去重数据库</span>
+
+        <div class="set-section">
+          <div class="set-row">
+            <label class="set-toggle">
+              <div class="set-toggle-text">
+                <div>去重数据库</div>
+                <div class="set-desc">已下载的视频不再重复下载</div>
+              </div>
               <input type="checkbox" id="setting-db" checked />
-              <span class="toggle-hint">已下载的视频不会重复下载</span>
             </label>
           </div>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-title">🔔 下载完成提示音</div>
-          <div class="settings-card-body">
-            <label class="toggle-row">
-              <span>开启提示音</span>
+
+        <div class="set-section">
+          <div class="set-row">
+            <label class="set-toggle">
+              <div class="set-toggle-text">
+                <div>完成提示音</div>
+                <div class="set-desc">下载全部完成后播放提示</div>
+              </div>
               <input type="checkbox" id="setting-sound" checked />
             </label>
           </div>
         </div>
-        <div class="settings-card">
-          <div class="settings-card-title">📱 关于 dou+</div>
-          <div class="settings-card-body" style="flex-direction:column;align-items:flex-start;gap:4px">
-            <span style="font-size:13px;color:var(--text2)">版本 <span id="app-version">3.0.0</span></span>
-            <span style="font-size:11px;color:var(--text3)">抖音批量下载工具 · 基于 Electron</span>
+
+        <div class="set-section">
+          <div class="set-row" style="flex-direction:column;align-items:flex-start;gap:2px">
+            <span style="font-size:12px;color:var(--text3);margin-bottom:4px">关于</span>
+            <span style="font-size:13px;color:var(--text)">dou+ <span id="app-version" style="color:var(--text3)">3.0.0</span></span>
+            <span style="font-size:11px;color:var(--text3)">抖音批量下载工具</span>
             <div id="update-status" style="font-size:12px;margin-top:6px;display:none"></div>
             <button id="btn-check-update" class="btn-text-only" style="font-size:12px;color:var(--pink);margin-top:4px;display:none">检查更新</button>
           </div>
         </div>
-        <div class="settings-card" style="border-color:rgba(231,76,60,0.3)">
-          <div class="settings-card-body" style="justify-content:center">
-            <button id="btn-logout" style="padding:10px 32px;border:1px solid rgba(231,76,60,0.5);border-radius:20px;background:none;color:#e74c3c;font-size:13px;font-weight:600;cursor:pointer;transition:all var(--ease)">
-              退出抖音登录
-            </button>
+
+        <div class="set-section" style="margin-top:16px">
+          <div class="set-row" style="justify-content:center">
+            <button id="btn-logout" class="set-btn-danger">退出登录</button>
+          </div>
+        </div>
+
+      </div>
           </div>
         </div>
       </div>
@@ -205,6 +217,6 @@
   </main>
 </div>
 
-<script src="app.js?v=5"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
