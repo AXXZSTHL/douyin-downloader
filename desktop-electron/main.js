@@ -223,15 +223,29 @@ function setupAutoUpdater() {
   autoUpdater.on('update-downloaded', () => {
     updateDownloaded = true;
     mainWindow?.webContents.send('update:status', { type: 'downloaded' });
+    const isMac = process.platform === 'darwin';
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: '更新已下载',
-      message: '更新已下载完毕，是否立即重启安装？',
-      buttons: ['立即重启', '稍后'],
+      message: isMac
+        ? '新版本已下载，是否打开安装包手动安装？\n（由于未签名，需要手动拖入应用程序文件夹）'
+        : '更新已下载完毕，是否立即重启安装？',
+      buttons: isMac ? ['打开安装包', '稍后'] : ['立即重启', '稍后'],
       defaultId: 0,
     }).then(({ response }) => {
       if (response === 0) {
-        autoUpdater.quitAndInstall();
+        if (isMac) {
+          // Open the downloaded DMG in Finder so the user can drag to Applications
+          const fs = require('fs');
+          const downloadPath = path.join(os.homedir(), 'Library', 'Caches', app.getName(), 'pending');
+          if (fs.existsSync(downloadPath)) {
+            const files = fs.readdirSync(downloadPath);
+            const dmg = files.find(f => f.endsWith('.dmg'));
+            if (dmg) shell.openPath(path.join(downloadPath, dmg));
+          }
+        } else {
+          autoUpdater.quitAndInstall();
+        }
       }
     });
   });

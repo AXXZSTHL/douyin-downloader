@@ -1,6 +1,6 @@
 {
   "name": "dou-plus",
-  "version": "3.2.1",
+  "version": "3.2.2",
   "description": "dou+ — 抖音批量下载工具",
   "main": "main.js",
   "author": "AXXZSTHL",
@@ -103,7 +103,8 @@
         }
       ],
       "icon": "icon_512.png",
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "identity": null
     },
     "publish": {
       "provider": "github",
