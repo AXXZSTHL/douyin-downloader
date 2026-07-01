@@ -56,9 +56,7 @@ class DownloadJob:
             "job_id": self.job_id,
             "url": self.url,
             "status": self.status,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "finished_at": self.finished_at,
+            "mode": self.mode,
             "total": self.total,
             "success": self.success,
             "failed": self.failed,
@@ -103,7 +101,7 @@ class JobManager:
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             for d in (data or []):
-                j = DownloadJob(d["job_id"], d.get("url", ""))
+                j = DownloadJob(d["job_id"], d.get("url", ""), mode=d.get("mode", "post"))
                 j.status = d.get("status", "done")
                 j.total = d.get("total", 0)
                 j.success = d.get("success", 0)
@@ -196,6 +194,13 @@ class JobManager:
         await self._load()
         async with self._lock:
             return self._jobs.get(job_id)
+
+    async def clear_completed(self) -> None:
+        await self._load()
+        async with self._lock:
+            ids = [jid for jid, j in self._jobs.items() if j.status in JobStatus.TERMINAL]
+            for jid in ids: self._jobs.pop(jid, None)
+            await self._save()
 
     async def list_jobs(self) -> List[DownloadJob]:
         await self._load()

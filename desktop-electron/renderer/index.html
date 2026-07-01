@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' https: data:;" />
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:18080; img-src 'self' https: data:;" />
   <title>dou+</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -125,6 +125,12 @@
     <!-- === TASKS PAGE === -->
     <div id="page-tasks" class="page">
       <div class="page-header"><h2>下载任务</h2></div>
+      <div style="display:flex;gap:6px;padding:0 32px 12px;align-items:center">
+        <button class="task-filter-btn active" data-filter="running" id="tf-running">下载中</button>
+        <button class="task-filter-btn" data-filter="done" id="tf-done">已完成</button>
+        <button class="task-filter-btn" data-filter="all" id="tf-all">全部</button>
+        <button id="btn-clear-tasks" style="margin-left:auto;padding:6px 14px;border:1px solid #333;border-radius:20px;background:none;color:#999;font-size:12px;cursor:pointer">清空已完成</button>
+      </div>
       <div id="task-page-list" style="display:flex;flex-direction:column;gap:8px;padding:0 32px 20px"></div>
       <div id="task-page-empty" style="text-align:center;padding:40px;color:#666">暂无下载任务</div>
     </div>
@@ -199,6 +205,6 @@
   </main>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

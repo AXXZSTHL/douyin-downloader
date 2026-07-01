@@ -34,8 +34,16 @@ let resolvingSelected = new Set();
 
 /* API */
 const api = window.electronAPI;
-async function GET(e) { try { return await api.get(e); } catch (_) { return null; } }
-async function POST(e, b) { try { return await api.post(e, b); } catch (_) { return null; } }
+var API = 'http://127.0.0.1:18080';
+async function GET(e) {
+  try { var r = await fetch(API + e); return await r.json(); } catch (_) { return null; }
+}
+async function POST(e, b) {
+  try {
+    var r = await fetch(API + e, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
+    return await r.json();
+  } catch (_) { return null; }
+}
 
 /* Toast */
 let _tt;
@@ -98,8 +106,12 @@ async function loadHotTrends() {
 }
 
 /* ============================== TASK PANEL ============================== */
-function addTask(jobId, url) {
-  activeJobs.unshift({ id: jobId, url: url, status: 'running', success: 0, failed: 0, skipped: 0 });
+function addTask(jobId, url, extra) {
+  if (extra === void 0) extra = {};
+  activeJobs.unshift({
+    id: jobId, url: url, status: 'running', success: 0, failed: 0, skipped: 0,
+    mode: currentMode, author_name: extra.author || '', titles: extra.titles || [],
+  });
   if (activeJobs.length > 50) activeJobs.length = 50;
   renderTasks();
 }
@@ -114,76 +126,112 @@ function updateTask(jobId, data) {
   if (data.items && data.items.length) j.items = data.items;
   renderTasks();
 }
-function taskHtml(j, showItems) {
-  if (showItems === void 0) showItems = false;
-  var urlText = j.url.length > 45 ? j.url.slice(0, 42) + '...' : j.url;
-  var statusClass = j.status === 'done' ? 'done' : (j.status === 'fail' ? 'fail' : 'running');
-  var statusText = j.status === 'done' ? '已完成' : (j.status === 'fail' ? '失败' : '下载中');
-  var author = j.author_name || '';
-  var total = j.total || 0;
+function taskHtml(j) {
+  var isRunning = j.status === 'running' || j.status === 'pending';
+  var isDone = j.status === 'done';
+  var isFail = j.status === 'fail';
+  var statusClass = isDone ? 'done' : (isFail ? 'fail' : 'running');
+  var statusText = isDone ? '已完成' : (isFail ? '失败' : '下载中');
+  var total = j.total || j.titles.length || 0;
   var done = (j.success || 0) + (j.failed || 0) + (j.skipped || 0);
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
+  var author = j.author_name || '';
+  var modeLabel = ({ post: '作品', like: '喜欢', mix: '合集', music: '音乐', collect: '收藏' })[j.mode] || '作品';
+  var displayName = (author ? author + ' · ' : '') + modeLabel;
 
   var html = '<div class="task-item" data-jobid="' + j.job_id + '">' +
     '<div class="t-header">' +
       '<div style="flex:1;min-width:0">' +
-        (author ? '<div class="t-author">' + author + '</div>' : '') +
-        '<div class="t-url">' + urlText + '</div>' +
+        '<div class="t-author">' + displayName + '</div>' +
       '</div>' +
       '<span class="t-status ' + statusClass + '">' + statusText + '</span>' +
     '</div>';
 
-  // Progress bar for running/pending
-  if (j.status === 'running' || j.status === 'pending') {
+  if (isRunning) {
     html += '<div class="t-progress"><div class="t-progress-bar" style="width:' + pct + '%"></div></div>';
+    html += '<div class="t-stats"><span>' + done + ' / ' + total + '</span>';
+    if (total > 0) html += '<span>' + pct + '%</span>';
+    html += '</div>';
+  } else if (isDone) {
+    html += '<div class="t-stats"><span style="color:#2ecc71">成功 ' + (j.success || total) + ' 项</span></div>';
+  } else if (isFail) {
+    html += '<div class="t-stats"><span style="color:#e74c3c">失败 ' + (j.failed || 0) + ' / 总计 ' + total + '</span></div>';
   }
 
-  html += '<div class="t-stats">' +
-    '<span>📦 ' + total + '</span><span style="color:#2ecc71">✓ ' + (j.success || 0) + '</span><span style="color:#e74c3c">✗ ' + (j.failed || 0) + '</span><span style="color:#f0c040">○ ' + (j.skipped || 0) + '</span>' +
-    (pct > 0 ? '<span class="t-pct">' + pct + '%</span>' : '') +
-  '</div>';
-
-  var items = j.items || [];
-  if (showItems && items.length > 0) {
+  var titles = j.titles || [];
+  if (titles.length > 0) {
     html += '<div class="t-items">';
-    items.slice(0, 10).forEach(function (it) {
-      var dup = it.duplicated ? '<span class="t-dup">重复</span>' : '';
-      var iconCls = it.status === 'success' ? 'ok' : (it.status === 'skipped' ? 'skip' : 'fail');
-      var icon = it.status === 'success' ? '✓' : (it.status === 'skipped' ? '○' : '✗');
-      html += '<div class="t-item"><span class="t-item-icon ' + iconCls + '">' + icon + '</span><span class="t-item-title">' + (it.title || '(无标题)') + '</span>' + dup + '</div>';
+    titles.slice(0, 8).forEach(function (t) {
+      html += '<div class="t-item"><span class="t-item-title">' + t + '</span></div>';
     });
-    if (items.length > 10) html += '<div class="t-item"><span style="color:#666;font-size:11px">...还有 ' + (items.length - 10) + ' 项</span></div>';
+    if (titles.length > 8) html += '<div class="t-item"><span style="color:#666;font-size:11px">...还有 ' + (titles.length - 8) + ' 个</span></div>';
     html += '</div>';
   }
 
-  if (j.save_path) {
+  if (j.save_path && isDone) {
     html += '<button class="btn-open-folder" data-path="' + j.save_path + '">📂 打开文件夹</button>';
   }
   html += '</div>';
   return html;
 }
+var taskFilter = 'running'; // 'running' | 'done' | 'all'
 function renderTasks() {
+  var running = activeJobs.filter(function (j) { return j.status === 'running' || j.status === 'pending'; });
+  var done = activeJobs.filter(function (j) { return j.status === 'done' || j.status === 'fail'; });
+  // Auto-switch: if current filter empty, fall back
+  if (taskFilter === 'running' && running.length === 0) taskFilter = 'all';
+  if (taskFilter === 'done' && done.length === 0) taskFilter = 'all';
+  var filtered = taskFilter === 'running' ? running : (taskFilter === 'done' ? done : activeJobs);
+
   var pg = $('#task-page-list');
   if (pg) {
-    pg.innerHTML = activeJobs.map(function (j) { return taskHtml(j, true); }).join('');
+    pg.innerHTML = filtered.map(taskHtml).join('');
     $('#task-page-empty').style.display = activeJobs.length === 0 ? '' : 'none';
-    // Bind open folder buttons
     $$('.btn-open-folder', pg).forEach(function (b) {
       b.addEventListener('click', function () { api.openPath(b.dataset.path); });
     });
   }
+  // Update counts and active state
+  var rn = $('#tf-running'); if (rn) rn.textContent = '下载中 (' + running.length + ')';
+  var dn = $('#tf-done'); if (dn) dn.textContent = '已完成 (' + done.length + ')';
+  var an = $('#tf-all'); if (an) an.textContent = '全部 (' + activeJobs.length + ')';
+  $$('.task-filter-btn').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.filter === taskFilter);
+  });
 }
 
 /* ============================== DOWNLOAD ============================== */
-async function startDownload() {
+async function startDownload(opts) {
+  if (opts === void 0) opts = {};
   var url = D.inputUrl.value.trim();
   if (!url) { toast('请先粘贴链接', 'info'); return; }
   isDownloading = true;
   D.progWrap.style.display = ''; D.progBar.style.width = '0%'; D.progText.style.display = ''; D.progText.textContent = '提交中...'; D.btnStop.style.display = '';
-  var d = await POST('/api/v1/download', { url, mode: currentMode, number: 0, path: D.settingPath.value || './Downloaded/', thread: threadCount });
+  var path = D.settingPath.value;
+  if (!path || path === '.') path = './Downloaded/';
+  path = path.replace(/\\/g, '/');
+  if (!path.endsWith('/')) path += '/';
+  var body = { url: url, mode: currentMode, number: 0, path: path, thread: threadCount };
+
+  // Use direct fetch, not Electron IPC, for reliability
+  var d;
+  try {
+    var res = await fetch('http://127.0.0.1:18080/api/v1/download', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    d = await res.json();
+  } catch (e) {
+    resetDownloadUI();
+    toast('网络错误: ' + e.message, 'err');
+    return;
+  }
+
   if (!d || !d.job_id) { resetDownloadUI(); toast('任务创建失败', 'err'); return; }
-  jobId = d.job_id; addTask(jobId, url);
+  jobId = d.job_id;
+  addTask(jobId, url, { author: opts.author || '', titles: opts.titles || [] });
   pollJobStatus();
+  toast('下载任务已创建', 'ok');
 }
 async function pollJobStatus() {
   if (!jobId || !isDownloading) return;
@@ -257,20 +305,32 @@ function showResolvedUser(data) {
       '</div>';
     $('#home-center').appendChild(rv);
     $('#btn-resolved-back', rv).addEventListener('click', hideResolvedView);
-    $('#btn-resolved-dl-all', rv).addEventListener('click', () => { if (resolvedUser) { var u = resolvedUser.sec_uid; currentMode = resolvedMode; hideResolvedView(); D.inputUrl.value = 'https://www.douyin.com/user/' + u; startDownload(); } });
+    $('#btn-resolved-dl-all', rv).addEventListener('click', () => {
+      if (resolvedUser) { var u = resolvedUser.sec_uid; var name = resolvedUser.nickname; var names = resolvedPosts.map(function (p) { return p.desc || p.aweme_id; }); currentMode = resolvedMode; hideResolvedView(); D.inputUrl.value = 'https://www.douyin.com/user/' + u; startDownload({ author: name, titles: names }); }
+    });
     $('#btn-resolved-dl-sel', rv).addEventListener('click', () => {
-      if (resolvingSelected.size) downloadSelectedAwemes(Array.from(resolvingSelected));
+      if (resolvingSelected.size) {
+        var titleMap = {}; resolvedPosts.forEach(function (p) { titleMap[p.aweme_id] = p.desc || p.aweme_id; });
+        downloadSelectedAwemes(Array.from(resolvingSelected), titleMap);
+      }
     });
     $('#btn-resolved-batch-dl', rv).addEventListener('click', () => {
-      if (resolvingSelected.size) downloadSelectedAwemes(Array.from(resolvingSelected));
+      if (resolvingSelected.size) {
+        var titleMap = {}; resolvedPosts.forEach(function (p) { titleMap[p.aweme_id] = p.desc || p.aweme_id; });
+        downloadSelectedAwemes(Array.from(resolvingSelected), titleMap);
+      }
     });
     $('#btn-resolved-batch-clear', rv).addEventListener('click', () => { resolvingSelected.clear(); updateResolvedBatch(); renderResolvedPosts(); });
     $$('[data-rmode]', rv).forEach(c => c.addEventListener('click', () => { $$('[data-rmode]', rv).forEach(x => x.classList.remove('active')); c.classList.add('active'); resolvedMode = c.dataset.rmode; }));
     $('#home-center').addEventListener('scroll', checkResolvedScroll);
   }
   rv.style.display = '';
+  // Observe "load more" indicator for infinite scroll
+  setupResolvedObserver();
   $('#resolved-name', rv).textContent = resolvedUser.nickname || '?';
-  $('#resolved-followers', rv).textContent = (resolvedUser.follower_count ? fmt(resolvedUser.follower_count) + ' 粉丝 · ' : '') + (resolvedUser.aweme_count ? resolvedUser.aweme_count + ' 作品' : '');
+  $('#resolved-followers', rv).textContent =
+    (resolvedUser.follower_count ? fmt(resolvedUser.follower_count) + ' 粉丝 · ' : '') +
+    (resolvedUser.aweme_count ? '共 ' + resolvedUser.aweme_count + ' 个作品' : '');
   $('#resolved-avatar', rv).src = resolvedUser.avatar || '';
   renderResolvedPosts();
 }
@@ -280,7 +340,9 @@ function hideResolvedView() {
   var ht = $('#hot-trends'); if (ht) ht.style.display = '';
   resolvedUser = null; resolvedPosts = []; resolvingSelected.clear();
 }
-async function downloadSelectedAwemes(ids) {
+async function downloadSelectedAwemes(ids, titleMap) {
+  if (titleMap === void 0) titleMap = {};
+  var author = resolvedUser ? resolvedUser.nickname : '';
   hideResolvedView(); resolvingSelected.clear();
   var path = D.settingPath.value || './Downloaded/';
   toast('提交 ' + ids.length + ' 个视频下载...', 'info');
@@ -288,7 +350,7 @@ async function downloadSelectedAwemes(ids) {
     var url = 'https://www.douyin.com/video/' + ids[i];
     var d = await POST('/api/v1/download', { url: url, mode: 'post', number: 1, path: path, thread: 5 });
     if (d && d.job_id) {
-      addTask(d.job_id, url);
+      addTask(d.job_id, url, { author: author, titles: [titleMap[ids[i]] || '视频 ' + ids[i]] });
       pollSingleJob(d.job_id);
     } else {
       toast('第 ' + (i + 1) + ' 个视频提交失败', 'err');
@@ -302,7 +364,20 @@ function pollSingleJob(tid) {
     var dd = await GET('/api/v1/jobs/' + tid);
     if (!dd) return;
     updateTask(tid, dd);
-    if (dd.status !== 'running' && dd.status !== 'pending') return;
+    // Also update home progress bar
+    var total = dd.total || 0;
+    var done = (dd.success || 0) + (dd.failed || 0) + (dd.skipped || 0);
+    if (total > 0) {
+      D.progWrap.style.display = '';
+      D.progBar.style.width = Math.min(Math.round(done / total * 100), 100) + '%';
+      D.progText.style.display = '';
+      D.progText.textContent = done + ' / ' + total;
+    }
+    if (dd.status !== 'running' && dd.status !== 'pending') {
+      if (dd.status === 'success') { D.progBar.style.width = '100%'; D.progText.textContent = '完成 ' + total + ' 项'; }
+      setTimeout(function () { D.progWrap.style.display = 'none'; D.progText.style.display = 'none'; }, 2000);
+      return;
+    }
     pollSingleJob(tid);
   }, 800);
 }
@@ -334,14 +409,47 @@ function updateResolvedBatch() {
   bar.style.display = n > 0 ? 'flex' : 'none'; if (n > 0) $('#resolved-batch-count').textContent = '已选 ' + n + ' 个';
   $('#btn-resolved-dl-sel').style.display = n > 0 ? '' : 'none';
 }
-function checkResolvedScroll() { if (resolvedUser && resolvedHasMore && !resolvedLoading) { var el = $('#home-center'); if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 300) loadMoreResolved(); } }
+function checkResolvedScroll() {
+  if (resolvedUser && resolvedHasMore && !resolvedLoading) {
+    var el = $('#home-center');
+    if (el && el.scrollTop + el.clientHeight >= el.scrollHeight - 300) loadMoreResolved();
+  }
+}
+var resolvedObserver = null;
+function setupResolvedObserver() {
+  if (resolvedObserver) resolvedObserver.disconnect();
+  var sentinel = $('#resolved-posts-more');
+  if (!sentinel) return;
+  resolvedObserver = new IntersectionObserver(function (entries) {
+    if (entries[0].isIntersecting && resolvedHasMore && !resolvedLoading) loadMoreResolved();
+  }, { root: $('#home-center'), threshold: 0.1 });
+  resolvedObserver.observe(sentinel);
+}
 async function loadMoreResolved() {
   if (!resolvedUser || resolvedLoading) return; resolvedLoading = true;
-  $('#resolved-posts-more').textContent = '加载中...';
+  var moreEl = $('#resolved-posts-more'); if (moreEl) moreEl.textContent = '加载中...';
   var d = await GET('/api/v1/user/posts?sec_uid=' + resolvedUser.sec_uid + '&max_cursor=' + resolvedCursor + '&count=18');
   resolvedLoading = false;
-  if (d && d.ok) { resolvedPosts = resolvedPosts.concat(d.posts || []); resolvedCursor = d.max_cursor || 0; resolvedHasMore = d.hasMore || false; renderResolvedPosts(); }
-  $('#resolved-posts-more').textContent = '滚动加载更多...';
+  if (d && d.ok) {
+    var newPosts = d.posts || [];
+    if (newPosts.length > 0) {
+      resolvedPosts = resolvedPosts.concat(newPosts);
+      resolvedCursor = d.max_cursor || 0;
+      resolvedHasMore = d.has_more || false;
+      renderResolvedPosts();
+      setupResolvedObserver(); // re-observe new sentinel
+    } else {
+      resolvedHasMore = false;
+    }
+  }
+  if (moreEl) {
+    if (resolvedHasMore) {
+      moreEl.innerHTML = '<button class="btn-primary-sm" onclick="loadMoreResolved()">加载更多</button>';
+      moreEl.style.display = '';
+    } else {
+      moreEl.textContent = '已加载全部';
+    }
+  }
 }
 
 /* ============================== FOLLOWING ============================== */
@@ -411,8 +519,9 @@ function updatePostsBatch() { var n = selectedPosts.size; D.postsBatchBar.style.
 async function downloadSelectedPosts() {
   if (selectedPosts.size === 0) return;
   var ids = Array.from(selectedPosts);
+  var titleMap = {}; detailPosts.forEach(function (p) { titleMap[p.aweme_id] = p.desc || p.aweme_id; });
   switchPage('home'); selectedPosts.clear(); updatePostsBatch();
-  await downloadSelectedAwemes(ids);
+  await downloadSelectedAwemes(ids, titleMap);
 }
 
 /* ============================== EVENTS ============================== */
@@ -428,7 +537,9 @@ D.btnPaste.addEventListener('click', async () => { try { var t = await navigator
 D.flwSearch.addEventListener('input', () => { renderFollowing(); if (flwHasMore && D.flwSearch.value.trim()) autoLoadAllFollowing(); });
 async function autoLoadAllFollowing() { while (flwHasMore && !flwLoading) { await loadFollowing(true); } renderFollowing(); }
 $('#btn-back-following').addEventListener('click', () => { D.userDetail.style.display = 'none'; D.flwGrid.style.display = ''; selectedPosts.clear(); updatePostsBatch(); });
-$('#btn-detail-dl-all').addEventListener('click', () => { if (detailUser) { var u = detailUser.sec_uid; switchPage('home'); D.inputUrl.value = 'https://www.douyin.com/user/' + u; startDownload(); } });
+$('#btn-detail-dl-all').addEventListener('click', () => {
+  if (detailUser) { var u = detailUser.sec_uid; var names = detailPosts.map(function (p) { return p.desc || p.aweme_id; }); switchPage('home'); D.inputUrl.value = 'https://www.douyin.com/user/' + u; startDownload({ author: detailUser.nickname, titles: names }); }
+});
 D.btnPostsMore.addEventListener('click', () => loadUserPosts());
 $('#btn-posts-batch-dl').addEventListener('click', downloadSelectedPosts);
 $('#btn-posts-batch-clear').addEventListener('click', () => { selectedPosts.clear(); updatePostsBatch(); renderPosts(); });
@@ -445,6 +556,18 @@ $('#btn-logout').addEventListener('click', async () => {
 D.pages.following.addEventListener('scroll', () => { var el = D.pages.following; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200 && flwHasMore && !flwLoading && !(D.flwSearch.value || '').trim()) loadFollowing(true); });
 D.userDetail.addEventListener('scroll', () => { if (D.userDetail.scrollTop + D.userDetail.clientHeight >= D.userDetail.scrollHeight - 200 && detailHasMore && !detailLoading) loadUserPosts(); });
 
+/* Task filter tabs */
+$$('.task-filter-btn').forEach(function (b) {
+  b.addEventListener('click', function () { taskFilter = b.dataset.filter; renderTasks(); });
+});
+$('#btn-clear-tasks').addEventListener('click', async function () {
+  await POST('/api/v1/jobs/clear', {});
+  activeJobs = activeJobs.filter(function (j) { return j.status === 'running' || j.status === 'pending'; });
+  taskFilter = 'running';
+  renderTasks();
+  toast('已清空已完成的任务', 'ok');
+});
+
 /* Clipboard poll */
 var _lastClip = '';
 setInterval(async () => { try { var t = await navigator.clipboard.readText(); if (t && t !== _lastClip) { _lastClip = t; var l = extractDouyinLink(t); if (l && currentPage === 'home') { D.inputUrl.value = l; doResolve(); } } } catch (_) {} }, 1500);
@@ -452,7 +575,12 @@ setInterval(async () => { try { var t = await navigator.clipboard.readText(); if
 /* Load past tasks */
 async function loadTaskHistory() {
   var d = await GET('/api/v1/jobs');
-  if (d && d.jobs) { activeJobs = d.jobs; renderTasks(); }
+  if (d && d.jobs) {
+    activeJobs = d.jobs.map(function (j) {
+      j.id = j.job_id || j.id; j.mode = j.mode || 'post'; return j;
+    });
+    renderTasks();
+  }
 }
 
 /* ============================== AUTO UPDATE ============================== */

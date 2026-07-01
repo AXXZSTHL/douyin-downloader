@@ -117,18 +117,20 @@ async def _execute_download(params: dict, deps: "_ServerDeps", job=None) -> Dict
 
     class _JobReporter:
         def update_step(self, step, detail=""): pass
-        def set_item_total(self, total, detail=""): pass
+        def set_item_total(self, total, detail=""):
+            if job: job.total = total
         def advance_item(self, status, detail=""):
+            if job:
+                if status == "success": job.success += 1
+                elif status == "failed": job.failed += 1
+                elif status == "skipped": job.skipped += 1
             import re
-            title = ""
             aweme_id = ""
             m = re.search(r'aweme[=_](\d+)', detail)
             if m: aweme_id = m.group(1)
-            cover = ""
-            duplicated = status == "skipped"
             captured_items.append({
-                "title": detail[:60], "aweme_id": aweme_id, "cover": cover,
-                "status": status, "duplicated": duplicated,
+                "title": detail[:60], "aweme_id": aweme_id, "cover": "",
+                "status": status, "duplicated": status == "skipped",
             })
 
     reporter = _JobReporter()
@@ -524,6 +526,12 @@ def build_app(config: ConfigLoader) -> FastAPI:
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
         return job.to_dict()
+
+    @app.post("/api/v1/jobs/clear")
+    async def clear_jobs() -> Dict[str, Any]:
+        """Clear completed jobs."""
+        await manager.clear_completed()
+        return {"ok": True}
 
     @app.get("/api/v1/jobs")
     async def list_jobs() -> Dict[str, List[Dict[str, Any]]]:
